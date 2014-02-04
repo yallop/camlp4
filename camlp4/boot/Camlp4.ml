@@ -15532,7 +15532,7 @@ module Struct =
                     (Pexp_letmodule ((with_loc i loc), (module_expr me),
                        (expr e)))
               | ExMat (loc, e, a) ->
-                  mkexp loc (Pexp_match ((expr e), (match_case a [])))
+                  mkexp loc (Pexp_match ((expr e), (match_case a []), []))
               | ExNew (loc, id) -> mkexp loc (Pexp_new (long_type_ident id))
               | ExObj (loc, po, cfl) ->
                   let p =
@@ -15576,7 +15576,7 @@ module Struct =
                     (Pexp_constant
                        (Const_string ((string_of_string_token loc s), None)))
               | ExTry (loc, e, a) ->
-                  mkexp loc (Pexp_try ((expr e), (match_case a [])))
+                  mkexp loc (Pexp_try ((expr e), (match_case a []), []))
               | Ast.ExTup (loc, (Ast.ExCom (_, e1, e2))) ->
                   mkexp loc
                     (Pexp_tuple

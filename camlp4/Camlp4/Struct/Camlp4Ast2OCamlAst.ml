@@ -853,7 +853,7 @@ value varify_constructors var_names =
     | ExLet loc rf bi e ->
         mkexp loc (Pexp_let (mkrf rf) (binding bi []) (expr e))
     | ExLmd loc i me e -> mkexp loc (Pexp_letmodule (with_loc i loc) (module_expr me) (expr e))
-    | ExMat loc e a -> mkexp loc (Pexp_match (expr e) (match_case a []))
+    | ExMat loc e a -> mkexp loc (Pexp_match (expr e) (match_case a []) [])
     | ExNew loc id -> mkexp loc (Pexp_new (long_type_ident id))
     | ExObj loc po cfl ->
         let p =
@@ -891,7 +891,7 @@ value varify_constructors var_names =
             [("", expr e1); ("", expr e2)])
     | ExStr loc s ->
         mkexp loc (Pexp_constant (Const_string (string_of_string_token loc s) None))
-    | ExTry loc e a -> mkexp loc (Pexp_try (expr e) (match_case a []))
+    | ExTry loc e a -> mkexp loc (Pexp_try (expr e) (match_case a []) [])
     | <:expr@loc< ($e1$, $e2$) >> ->
          mkexp loc (Pexp_tuple (List.map expr (list_of_expr e1 (list_of_expr e2 []))))
     | <:expr@loc< ($tup:_$) >> -> error loc "singleton tuple"
