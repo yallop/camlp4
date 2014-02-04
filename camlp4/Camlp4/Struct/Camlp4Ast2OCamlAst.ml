@@ -1060,7 +1060,7 @@ value varify_constructors var_names =
     | SgExc _ _ -> assert False (*FIXME*)
     | SgExt loc n t sl -> [mksig loc (Psig_value (mkvalue_desc loc (with_loc n loc) t (list_of_meta_list sl))) :: l]
     | SgInc loc mt -> [mksig loc (Psig_include (module_type mt) []) :: l]
-    | SgMod loc n mt -> [mksig loc (Psig_module {pmd_name=with_loc n loc; pmd_type=module_type mt; pmd_attributes=[]}) :: l]
+    | SgMod loc n mt -> [mksig loc (Psig_module {pmd_name=with_loc n loc; pmd_type=module_type mt; pmd_attributes=[]; pmd_loc = mkloc loc}) :: l]
     | SgRecMod loc mb ->
         [mksig loc (Psig_recmodule (module_sig_binding mb [])) :: l]
     | SgMty loc n mt ->
@@ -1069,7 +1069,7 @@ value varify_constructors var_names =
           [ MtQuo _ _ -> None
           | _ -> Some (module_type mt) ]
         in
-        [mksig loc (Psig_modtype {pmtd_name=with_loc n loc; pmtd_type=si; pmtd_attributes=[]}) :: l]
+        [mksig loc (Psig_modtype {pmtd_name=with_loc n loc; pmtd_type=si; pmtd_attributes=[]; pmtd_loc = mkloc loc}) :: l]
     | SgOpn loc id ->
         [mksig loc (Psig_open Fresh (long_uident id) []) :: l]
     | SgTyp loc tdl -> [mksig loc (Psig_type (mktype_decl tdl [])) :: l]
@@ -1080,7 +1080,7 @@ value varify_constructors var_names =
     [ <:module_binding< $x$ and $y$ >> ->
         module_sig_binding x (module_sig_binding y acc)
     | <:module_binding@loc< $s$ : $mt$ >> ->
-        [{pmd_name=with_loc s loc; pmd_type=module_type mt; pmd_attributes=[]} :: acc]
+        [{pmd_name=with_loc s loc; pmd_type=module_type mt; pmd_attributes=[]; pmd_loc = mkloc loc} :: acc]
     | _ -> assert False ]
   and module_str_binding x acc =
     match x with
@@ -1093,7 +1093,8 @@ value varify_constructors var_names =
            pmod_desc=Pmod_constraint(module_expr me,module_type mt);
            pmod_attributes=[];
           };
-          pmb_attributes=[]} :: acc]
+          pmb_attributes=[];
+          pmb_loc=mkloc loc} :: acc]
     | _ -> assert False ]
   and module_expr =
     fun
@@ -1142,7 +1143,7 @@ value varify_constructors var_names =
     | StExp loc e -> [mkstr loc (Pstr_eval (expr e) []) :: l]
     | StExt loc n t sl -> [mkstr loc (Pstr_primitive (mkvalue_desc loc (with_loc n loc) t (list_of_meta_list sl))) :: l]
     | StInc loc me -> [mkstr loc (Pstr_include (module_expr me, [])) :: l]
-    | StMod loc n me -> [mkstr loc (Pstr_module {pmb_name=with_loc n loc;pmb_expr=module_expr me;pmb_attributes=[]}) :: l]
+    | StMod loc n me -> [mkstr loc (Pstr_module {pmb_name=with_loc n loc;pmb_expr=module_expr me;pmb_attributes=[]; pmb_loc=mkloc loc}) :: l]
     | StRecMod loc mb ->
         [mkstr loc (Pstr_recmodule (module_str_binding mb [])) :: l]
     | StMty loc n mt ->
@@ -1151,7 +1152,7 @@ value varify_constructors var_names =
           [ MtQuo _ _ -> None
           | _ -> Some (module_type mt) ]
         in
-        [mkstr loc (Pstr_modtype {pmtd_name=with_loc n loc; pmtd_type=si; pmtd_attributes=[]}) :: l]
+        [mkstr loc (Pstr_modtype {pmtd_name=with_loc n loc; pmtd_type=si; pmtd_attributes=[]; pmtd_loc=mkloc loc}) :: l]
     | StOpn loc ov id ->
         let fresh = override_flag loc ov in
         [mkstr loc (Pstr_open fresh (long_uident id) []) :: l]

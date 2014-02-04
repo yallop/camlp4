@@ -15818,6 +15818,7 @@ module Struct =
                           pmd_name = with_loc n loc;
                           pmd_type = module_type mt;
                           pmd_attributes = [];
+                          pmd_loc = mkloc loc;
                         })) ::
                     l
               | SgRecMod (loc, mb) ->
@@ -15835,6 +15836,7 @@ module Struct =
                             pmtd_name = with_loc n loc;
                             pmtd_type = si;
                             pmtd_attributes = [];
+                            pmtd_loc = mkloc loc;
                           })) ::
                       l
               | SgOpn (loc, id) ->
@@ -15855,6 +15857,7 @@ module Struct =
                     pmd_name = with_loc s loc;
                     pmd_type = module_type mt;
                     pmd_attributes = [];
+                    pmd_loc = mkloc loc;
                   } :: acc
               | _ -> assert false
             and module_str_binding x acc =
@@ -15873,6 +15876,7 @@ module Struct =
                         pmod_attributes = [];
                       };
                     pmb_attributes = [];
+                    pmb_loc = mkloc loc;
                   } :: acc
               | _ -> assert false
             and module_expr =
@@ -15982,6 +15986,7 @@ module Struct =
                           pmb_name = with_loc n loc;
                           pmb_expr = module_expr me;
                           pmb_attributes = [];
+                          pmb_loc = mkloc loc;
                         })) ::
                     l
               | StRecMod (loc, mb) ->
@@ -15999,6 +16004,7 @@ module Struct =
                             pmtd_name = with_loc n loc;
                             pmtd_type = si;
                             pmtd_attributes = [];
+                            pmtd_loc = mkloc loc;
                           })) ::
                       l
               | StOpn (loc, ov, id) ->
