@@ -246,6 +246,8 @@ New syntax:\
           
         let _ = Gram.Entry.clear module_longident_with_app
           
+        let _ = Gram.Entry.clear module_type_longident_with_app
+          
         let _ = Gram.Entry.clear module_rec_declaration
           
         let _ = Gram.Entry.clear module_type
@@ -848,6 +850,9 @@ New syntax:\
             and _ = (module_type : 'module_type Gram.Entry.t)
             and _ =
               (module_rec_declaration : 'module_rec_declaration Gram.Entry.t)
+            and _ =
+              (module_type_longident_with_app :
+                'module_type_longident_with_app Gram.Entry.t)
             and _ =
               (module_longident_with_app :
                 'module_longident_with_app Gram.Entry.t)
@@ -1549,10 +1554,11 @@ New syntax:\
                                   (Ast.MtQuo (_loc, i) : 'module_type))));
                            ([ Gram.Snterm
                                 (Gram.Entry.obj
-                                   (module_longident_with_app :
-                                     'module_longident_with_app Gram.Entry.t)) ],
+                                   (module_type_longident_with_app :
+                                     'module_type_longident_with_app Gram.
+                                       Entry.t)) ],
                             (Gram.Action.mk
-                               (fun (i : 'module_longident_with_app)
+                               (fun (i : 'module_type_longident_with_app)
                                   (_loc : Gram.Loc.t) ->
                                   (Ast.MtId (_loc, i) : 'module_type))));
                            ([ Gram.Stoken
@@ -5829,6 +5835,66 @@ New syntax:\
                                       (Ast.IdAnt (_loc,
                                          (mk_anti ~c: "ident" n s)) :
                                         'module_longident_with_app)
+                                  | _ -> assert false))) ]) ]))
+                    ());
+               Gram.extend
+                 (module_type_longident_with_app :
+                   'module_type_longident_with_app Gram.Entry.t)
+                 ((fun () ->
+                     (None,
+                      [ ((Some "apply"), None,
+                         [ ([ Gram.Sself; Gram.Sself ],
+                            (Gram.Action.mk
+                               (fun (j : 'module_type_longident_with_app)
+                                  (i : 'module_type_longident_with_app)
+                                  (_loc : Gram.Loc.t) ->
+                                  (Ast.IdApp (_loc, i, j) :
+                                    'module_type_longident_with_app)))) ]);
+                        ((Some "."), None,
+                         [ ([ Gram.Sself; Gram.Skeyword "."; Gram.Sself ],
+                            (Gram.Action.mk
+                               (fun (j : 'module_type_longident_with_app) _
+                                  (i : 'module_type_longident_with_app)
+                                  (_loc : Gram.Loc.t) ->
+                                  (Ast.IdAcc (_loc, i, j) :
+                                    'module_type_longident_with_app)))) ]);
+                        ((Some "simple"), None,
+                         [ ([ Gram.Skeyword "("; Gram.Sself;
+                              Gram.Skeyword ")" ],
+                            (Gram.Action.mk
+                               (fun _ (i : 'module_type_longident_with_app) _
+                                  (_loc : Gram.Loc.t) ->
+                                  (i : 'module_type_longident_with_app))));
+                           ([ Gram.Snterm
+                                (Gram.Entry.obj
+                                   (a_LIDENT : 'a_LIDENT Gram.Entry.t)) ],
+                            (Gram.Action.mk
+                               (fun (i : 'a_LIDENT) (_loc : Gram.Loc.t) ->
+                                  (Ast.IdLid (_loc, i) :
+                                    'module_type_longident_with_app))));
+                           ([ Gram.Snterm
+                                (Gram.Entry.obj
+                                   (a_UIDENT : 'a_UIDENT Gram.Entry.t)) ],
+                            (Gram.Action.mk
+                               (fun (i : 'a_UIDENT) (_loc : Gram.Loc.t) ->
+                                  (Ast.IdUid (_loc, i) :
+                                    'module_type_longident_with_app))));
+                           ([ Gram.Stoken
+                                (((function
+                                   | ANTIQUOT (("" | "id" | "anti" | "list"),
+                                       _) -> true
+                                   | _ -> false),
+                                  "ANTIQUOT ((\"\" | \"id\" | \"anti\" | \"list\"), _)")) ],
+                            (Gram.Action.mk
+                               (fun (__camlp4_0 : Gram.Token.t)
+                                  (_loc : Gram.Loc.t) ->
+                                  match __camlp4_0 with
+                                  | ANTIQUOT
+                                      ((("" | "id" | "anti" | "list" as n)),
+                                      s) ->
+                                      (Ast.IdAnt (_loc,
+                                         (mk_anti ~c: "ident" n s)) :
+                                        'module_type_longident_with_app)
                                   | _ -> assert false))) ]) ]))
                     ());
                Gram.extend (type_longident : 'type_longident Gram.Entry.t)

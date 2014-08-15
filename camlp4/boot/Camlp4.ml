@@ -2767,6 +2767,8 @@ module Sig =
           
         val module_longident_with_app : Ast.ident Gram.Entry.t
           
+        val module_type_longident_with_app : Ast.ident Gram.Entry.t
+          
         val module_rec_declaration : Ast.module_binding Gram.Entry.t
           
         val module_type : Ast.module_type Gram.Entry.t
@@ -21551,6 +21553,9 @@ module OCamlInitSyntax =
           
         let module_longident_with_app =
           Gram.Entry.mk "module_longident_with_app"
+          
+        let module_type_longident_with_app =
+          Gram.Entry.mk "module_type_longident_with_app"
           
         let module_rec_declaration = Gram.Entry.mk "module_rec_declaration"
           

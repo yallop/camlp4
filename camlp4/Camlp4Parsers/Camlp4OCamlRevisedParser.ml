@@ -146,6 +146,7 @@ New syntax:\
   Gram.Entry.clear module_expr_quot;
   Gram.Entry.clear module_longident;
   Gram.Entry.clear module_longident_with_app;
+  Gram.Entry.clear module_type_longident_with_app;
   Gram.Entry.clear module_rec_declaration;
   Gram.Entry.clear module_type;
   Gram.Entry.clear module_type_quot;
@@ -456,9 +457,9 @@ New syntax:\
       label_ipatt label_ipatt_list label_longident label_patt label_patt_list
       labeled_ipatt let_binding meth_list meth_decl module_binding module_binding0
       module_binding_quot module_declaration module_expr module_expr_quot
-      module_longident module_longident_with_app module_rec_declaration
-      module_type module_type_quot more_ctyp name_tags opt_as_lident
-      opt_class_self_patt opt_class_self_type opt_comma_ctyp opt_dot_dot opt_eq_ctyp opt_expr
+      module_longident module_longident_with_app module_type_longident_with_app
+      module_rec_declaration module_type module_type_quot more_ctyp name_tags
+      opt_as_lident opt_class_self_patt opt_class_self_type opt_comma_ctyp opt_dot_dot opt_eq_ctyp opt_expr
       opt_meth_list opt_mutable opt_polyt opt_private opt_rec
       opt_virtual opt_when_expr patt patt_as_patt_opt patt_eoi
       patt_quot patt_tcon phrase poly_type row_field
@@ -572,7 +573,7 @@ New syntax:\
         [ `ANTIQUOT (""|"mtyp"|"anti"|"list" as n) s ->
             <:module_type< $anti:mk_anti ~c:"module_type" n s$ >>
         | `QUOTATION x -> Quotation.expand _loc x Quotation.DynAst.module_type_tag
-        | i = module_longident_with_app -> <:module_type< $id:i$ >>
+        | i = module_type_longident_with_app -> <:module_type< $id:i$ >>
         | "'"; i = a_ident -> <:module_type< ' $i$ >>
         | "(";  i = TRY [ "module"; i = module_longident -> i ]; ")" -> Ast.MtAlias (_loc, i)
         | "("; mt = SELF; ")" -> <:module_type< $mt$ >>
@@ -1282,6 +1283,18 @@ New syntax:\
         [ `ANTIQUOT (""|"id"|"anti"|"list" as n) s ->
             <:ident< $anti:mk_anti ~c:"ident" n s$ >>
         | i = a_UIDENT -> <:ident< $uid:i$ >>
+        | "("; i = SELF; ")" -> i ] ]
+    ;
+    module_type_longident_with_app:
+      [ "apply"
+        [ i = SELF; j = SELF -> <:ident< $i$ $j$ >> ]
+      | "."
+        [ i = SELF; "."; j = SELF -> <:ident< $i$.$j$ >> ]
+      | "simple"
+        [ `ANTIQUOT (""|"id"|"anti"|"list" as n) s ->
+            <:ident< $anti:mk_anti ~c:"ident" n s$ >>
+        | i = a_UIDENT -> <:ident< $uid:i$ >>
+        | i = a_LIDENT -> <:ident< $lid:i$ >>
         | "("; i = SELF; ")" -> i ] ]
     ;
     type_longident:
