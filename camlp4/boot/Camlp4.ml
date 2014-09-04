@@ -1,3 +1,13 @@
+let parr = function
+  | "" -> Parsetree.Parr_simple
+  | s when s.[0] = '?' -> Parr_optional (String.sub s 1 (String.length s - 1))
+  | s  -> Parsetree.Parr_labelled s
+
+let papp = function
+  | "" -> Parsetree.Papp_simple
+  | s when s.[0] = '?' -> Papp_optional (String.sub s 1 (String.length s - 1))
+  | s  -> Parsetree.Papp_labelled s
+
 module Utils : sig val float_repres : float -> string
                       end =
   struct
@@ -14863,14 +14873,14 @@ module Struct =
                     then mktyp loc (Ptyp_class (li, (List.map ctyp al)))
                     else mktyp loc (Ptyp_constr (li, (List.map ctyp al)))
               | TyArr (loc, (TyLab (_, lab, t1)), t2) ->
-                  mktyp loc (Ptyp_arrow (lab, (ctyp t1), (ctyp t2)))
+                  mktyp loc (Ptyp_arrow (parr lab, (ctyp t1), (ctyp t2)))
               | TyArr (loc, (TyOlb (loc1, lab, t1)), t2) ->
                   let t1 = TyApp (loc1, (predef_option loc1), t1)
                   in
                     mktyp loc
-                      (Ptyp_arrow (("?" ^ lab), (ctyp t1), (ctyp t2)))
+                      (Ptyp_arrow (Parr_optional lab, (ctyp t1), (ctyp t2)))
               | TyArr (loc, t1, t2) ->
-                  mktyp loc (Ptyp_arrow ("", (ctyp t1), (ctyp t2)))
+                  mktyp loc (Ptyp_arrow (Parr_simple, (ctyp t1), (ctyp t2)))
               | Ast.TyObj (loc, fl, Ast.RvNil) ->
                   mktyp loc (Ptyp_object ((meth_list fl []), Closed))
               | Ast.TyObj (loc, fl, Ast.RvRowVar) ->
@@ -15547,7 +15557,7 @@ module Struct =
                   mkexp loc
                     (Pexp_apply
                        ((mkexp loc (Pexp_ident (lident_with_loc "!" loc))),
-                       [ ("", (expr x)) ]))
+                       [ (Papp_simple, (expr x)) ]))
               | (ExAcc (loc, _, _) | Ast.ExId (loc, (Ast.IdAcc (_, _, _))) as
                  e) ->
                   let (e, l) =
@@ -15603,7 +15613,7 @@ module Struct =
                     (Pexp_apply
                        ((mkexp loc
                            (Pexp_ident (array_function loc "Array" "get"))),
-                       [ ("", (expr e1)); ("", (expr e2)) ]))
+                       [ (Papp_simple, (expr e1)); (Papp_simple, (expr e2)) ]))
               | ExArr (loc, e) ->
                   mkexp loc (Pexp_array (List.map expr (list_of_expr e [])))
               | ExAsf loc ->
@@ -15621,7 +15631,7 @@ module Struct =
                          Pexp_apply
                            ((mkexp loc
                                (Pexp_ident (lident_with_loc ":=" loc))),
-                           [ ("", (expr x)); ("", (expr v)) ])
+                           [ (Papp_simple, (expr x)); (Papp_simple, (expr v)) ])
                      | ExAcc (loc, _, _) ->
                          (match (expr e).pexp_desc with
                           | Pexp_field (e, lab) ->
@@ -15631,7 +15641,7 @@ module Struct =
                          Pexp_apply
                            ((mkexp loc
                                (Pexp_ident (array_function loc "Array" "set"))),
-                           [ ("", (expr e1)); ("", (expr e2)); ("", (expr v)) ])
+                           [ (Papp_simple, (expr e1)); (Papp_simple, (expr e2)); (Papp_simple, (expr v)) ])
                      | Ast.ExId (_, (Ast.IdLid (lloc, lab))) ->
                          Pexp_setinstvar ((with_loc lab lloc), (expr v))
                      | ExSte (loc, e1, e2) ->
@@ -15639,7 +15649,7 @@ module Struct =
                            ((mkexp loc
                                (Pexp_ident
                                   (array_function loc "String" "set"))),
-                           [ ("", (expr e1)); ("", (expr e2)); ("", (expr v)) ])
+                           [ (Papp_simple, (expr e1)); (Papp_simple, (expr e2)); (Papp_simple, (expr v)) ])
                      | _ -> error loc "bad left part of assignment")
                   in mkexp loc e
               | ExAsr (loc, e) -> mkexp loc (Pexp_assert (expr e))
@@ -15711,9 +15721,15 @@ module Struct =
               | ExLet (loc, rf, bi, e) ->
                   mkexp loc (Pexp_let ((mkrf rf), (binding bi []), (expr e)))
               | ExLmd (loc, i, me, e) ->
+                  let mb = {
+                    pmb_loc = mkloc loc;
+                    pmb_name = with_loc i loc;
+                    pmb_expr = module_expr me;
+                    pmb_attributes = [];
+                    pmb_implicit = Nonimplicit;
+                  } in
                   mkexp loc
-                    (Pexp_letmodule ((with_loc i loc), (module_expr me),
-                       (expr e)))
+                    (Pexp_letmodule (mb, (expr e)))
               | ExMat (loc, e, a) ->
                   mkexp loc (Pexp_match ((expr e), (match_case a [])))
               | ExNew (loc, id) -> mkexp loc (Pexp_new (long_type_ident id))
@@ -15753,7 +15769,7 @@ module Struct =
                     (Pexp_apply
                        ((mkexp loc
                            (Pexp_ident (array_function loc "String" "get"))),
-                       [ ("", (expr e1)); ("", (expr e2)) ]))
+                       [ (Papp_simple, (expr e1)); (Papp_simple, (expr e2)) ]))
               | ExStr (loc, s) ->
                   mkexp loc
                     (Pexp_constant
@@ -15782,7 +15798,7 @@ module Struct =
                   let e2 = ExSeq (loc, el)
                   in mkexp loc (Pexp_while ((expr e1), (expr e2)))
               | ExOpI (loc, i, ov, e) ->
-                  let fresh = override_flag loc ov
+                  let fresh = Open_all (override_flag loc ov)
                   in mkexp loc (Pexp_open (fresh, (long_uident i), (expr e)))
               | Ast.ExPkg (loc, (Ast.MeTyc (_, me, pt))) ->
                   mkexp loc
@@ -15819,10 +15835,10 @@ module Struct =
               | e -> expr e
             and label_expr =
               function
-              | ExLab (loc, lab, eo) -> (lab, (expr_of_lab loc lab eo))
+              | ExLab (loc, lab, eo) -> (papp lab, (expr_of_lab loc lab eo))
               | ExOlb (loc, lab, eo) ->
-                  (("?" ^ lab), (expr_of_lab loc lab eo))
-              | e -> ("", (expr e))
+                  (Papp_optional lab, (expr_of_lab loc lab eo))
+              | e -> (Papp_simple, (expr e))
             and binding x acc =
               match x with
               | Ast.BiAnd (_, x, y) -> binding x (binding y acc)
@@ -15890,7 +15906,7 @@ module Struct =
               in { pc_lhs = p; pc_guard = g; pc_rhs = expr e; }
             and mkfun loc lab def p e w =
               let () = match w with | Ast.ExNil _ -> () | _ -> assert false
-              in mkexp loc (Pexp_fun (lab, def, p, (expr e)))
+              in mkexp loc (Pexp_fun (parr lab, def, p, (expr e)))
             and mklabexp x acc =
               match x with
               | Ast.RbSem (_, x, y) -> mklabexp x (mklabexp y acc)
@@ -16035,6 +16051,7 @@ module Struct =
                           pmd_name = with_loc n loc;
                           pmd_type = module_type mt;
                           pmd_attributes = [];
+                          pmd_implicit = Nonimplicit;
                         })) ::
                     l
               | SgRecMod (loc, mb) ->
@@ -16056,12 +16073,12 @@ module Struct =
                           })) ::
                       l
               | SgOpn (loc, ov, id) ->
-                  let fresh = override_flag loc ov
+                  let fresh = Open_all (override_flag loc ov)
                   in
                     (mksig loc
                        (Psig_open
                           {
-                            popen_override = fresh;
+                            popen_flag = fresh;
                             popen_lid = long_uident id;
                             popen_attributes = [];
                             popen_loc = mkloc loc;
@@ -16089,6 +16106,7 @@ module Struct =
                     pmd_name = with_loc s loc;
                     pmd_type = module_type mt;
                     pmd_attributes = [];
+                    pmd_implicit = Nonimplicit;
                   } :: acc
               | _ -> assert false
             and module_str_binding x acc =
@@ -16108,6 +16126,7 @@ module Struct =
                         pmod_attributes = [];
                       };
                     pmb_attributes = [];
+                    pmb_implicit = Nonimplicit;
                   } :: acc
               | _ -> assert false
             and module_expr =
@@ -16230,6 +16249,7 @@ module Struct =
                           pmb_name = with_loc n loc;
                           pmb_expr = module_expr me;
                           pmb_attributes = [];
+                    pmb_implicit = Nonimplicit;
                         })) ::
                     l
               | StRecMod (loc, mb) ->
@@ -16251,12 +16271,12 @@ module Struct =
                           })) ::
                       l
               | StOpn (loc, ov, id) ->
-                  let fresh = override_flag loc ov
+                  let fresh = Open_all (override_flag loc ov)
                   in
                     (mkstr loc
                        (Pstr_open
                           {
-                            popen_override = fresh;
+                            popen_flag = fresh;
                             popen_lid = long_uident id;
                             popen_attributes = [];
                             popen_loc = mkloc loc;
@@ -16279,14 +16299,14 @@ module Struct =
                     (Pcty_constr ((long_class_ident id),
                        (List.map ctyp (list_of_opt_ctyp tl []))))
               | CtFun (loc, (TyLab (_, lab, t)), ct) ->
-                  mkcty loc (Pcty_arrow (lab, (ctyp t), (class_type ct)))
+                  mkcty loc (Pcty_arrow (parr lab, (ctyp t), (class_type ct)))
               | CtFun (loc, (TyOlb (loc1, lab, t)), ct) ->
                   let t = TyApp (loc1, (predef_option loc1), t)
                   in
                     mkcty loc
-                      (Pcty_arrow (("?" ^ lab), (ctyp t), (class_type ct)))
+                      (Pcty_arrow (Parr_optional lab, (ctyp t), (class_type ct)))
               | CtFun (loc, t, ct) ->
-                  mkcty loc (Pcty_arrow ("", (ctyp t), (class_type ct)))
+                  mkcty loc (Pcty_arrow (Parr_simple, (ctyp t), (class_type ct)))
               | CtSig (loc, t_o, ctfl) ->
                   let t =
                     (match t_o with | Ast.TyNil _ -> Ast.TyAny loc | t -> t) in
@@ -16385,22 +16405,22 @@ module Struct =
                        (List.map ctyp (list_of_opt_ctyp tl []))))
               | CeFun (loc, (PaLab (_, lab, po)), ce) ->
                   mkcl loc
-                    (Pcl_fun (lab, None, (patt_of_lab loc lab po),
+                    (Pcl_fun (parr lab, None, (patt_of_lab loc lab po),
                        (class_expr ce)))
               | CeFun (loc, (PaOlbi (_, lab, p, e)), ce) ->
                   let lab = paolab lab p
                   in
                     mkcl loc
-                      (Pcl_fun (("?" ^ lab), (Some (expr e)), (patt p),
+                      (Pcl_fun (Parr_optional lab, (Some (expr e)), (patt p),
                          (class_expr ce)))
               | CeFun (loc, (PaOlb (_, lab, p)), ce) ->
                   let lab = paolab lab p
                   in
                     mkcl loc
-                      (Pcl_fun (("?" ^ lab), None, (patt_of_lab loc lab p),
+                      (Pcl_fun (Parr_optional lab, None, (patt_of_lab loc lab p),
                          (class_expr ce)))
               | CeFun (loc, p, ce) ->
-                  mkcl loc (Pcl_fun ("", None, (patt p), (class_expr ce)))
+                  mkcl loc (Pcl_fun (Parr_simple, None, (patt p), (class_expr ce)))
               | CeLet (loc, rf, bi, ce) ->
                   mkcl loc
                     (Pcl_let ((mkrf rf), (binding bi []), (class_expr ce)))

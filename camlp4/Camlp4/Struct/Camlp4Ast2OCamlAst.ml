@@ -280,11 +280,11 @@ module Make (Ast : Sig.Camlp4Ast) = struct
         if is_cls then mktyp loc (Ptyp_class li (List.map ctyp al))
         else mktyp loc (Ptyp_constr li (List.map ctyp al))
     | TyArr loc (TyLab _ lab t1) t2 ->
-        mktyp loc (Ptyp_arrow lab (ctyp t1) (ctyp t2))
+        mktyp loc (Ptyp_arrow (Parr_labelled lab) (ctyp t1) (ctyp t2))
     | TyArr loc (TyOlb loc1 lab t1) t2 ->
         let t1 = TyApp loc1 (predef_option loc1) t1 in
-        mktyp loc (Ptyp_arrow ("?" ^ lab) (ctyp t1) (ctyp t2))
-    | TyArr loc t1 t2 -> mktyp loc (Ptyp_arrow "" (ctyp t1) (ctyp t2))
+        mktyp loc (Ptyp_arrow (Parr_optional lab) (ctyp t1) (ctyp t2))
+    | TyArr loc t1 t2 -> mktyp loc (Ptyp_arrow Parr_simple (ctyp t1) (ctyp t2))
     | <:ctyp@loc< < $fl$ > >> -> mktyp loc (Ptyp_object (meth_list fl []) Closed)
     | <:ctyp@loc< < $fl$ .. > >> ->
         mktyp loc (Ptyp_object (meth_list fl []) Open)
@@ -813,7 +813,7 @@ value varify_constructors var_names =
     fun
     [ <:expr@loc< $x$.val >> ->
         mkexp loc
-          (Pexp_apply (mkexp loc (Pexp_ident (lident_with_loc "!" loc))) [("", expr x)])
+          (Pexp_apply (mkexp loc (Pexp_ident (lident_with_loc "!" loc))) [(Papp_simple, expr x)])
     | ExAcc loc _ _ | <:expr@loc< $id:<:ident< $_$ . $_$ >>$ >> as e ->
         let (e, l) =
           match sep_expr_acc [] e with
@@ -859,7 +859,7 @@ value varify_constructors var_names =
     | ExAre loc e1 e2 ->
         mkexp loc
           (Pexp_apply (mkexp loc (Pexp_ident (array_function loc "Array" "get")))
-            [("", expr e1); ("", expr e2)])
+            [(Papp_simple, expr e1); (Papp_simple, expr e2)])
     | ExArr loc e -> mkexp loc (Pexp_array (List.map expr (list_of_expr e [])))
     | ExAsf loc ->
         mkexp loc (Pexp_assert (mkexp loc (Pexp_construct {txt=Lident "false"; loc=mkloc loc} None)))
@@ -868,19 +868,19 @@ value varify_constructors var_names =
           match e with
           [ <:expr@loc< $x$.val >> ->
               Pexp_apply (mkexp loc (Pexp_ident (lident_with_loc ":=" loc)))
-                [("", expr x); ("", expr v)]
+                [(Papp_simple, expr x); (Papp_simple, expr v)]
           | ExAcc loc _ _ ->
               match (expr e).pexp_desc with
               [ Pexp_field e lab -> Pexp_setfield e lab (expr v)
               | _ -> error loc "bad record access" ]
           | ExAre loc e1 e2 ->
               Pexp_apply (mkexp loc (Pexp_ident (array_function loc "Array" "set")))
-                [("", expr e1); ("", expr e2); ("", expr v)]
+                [(Papp_simple, expr e1); (Papp_simple, expr e2); (Papp_simple, expr v)]
           | <:expr< $id:(<:ident@lloc< $lid:lab$ >>)$ >> -> Pexp_setinstvar (with_loc lab lloc) (expr v)
           | ExSte loc e1 e2 ->
               Pexp_apply
                 (mkexp loc (Pexp_ident (array_function loc "String" "set")))
-                [("", expr e1); ("", expr e2); ("", expr v)]
+                [(Papp_simple, expr e1); (Papp_simple, expr e2); (Papp_simple, expr v)]
           | _ -> error loc "bad left part of assignment" ]
         in
         mkexp loc e
@@ -898,13 +898,13 @@ value varify_constructors var_names =
         let e3 = ExSeq loc el in
         mkexp loc (Pexp_for (patt p) (expr e1) (expr e2) (mkdirection df) (expr e3))
     | <:expr@loc< fun [ $PaLab _ lab po$ when $w$ -> $e$ ] >> ->
-        mkfun loc lab None (patt_of_lab loc lab po) e w
+        mkfun loc (Parr_labelled lab) None (patt_of_lab loc lab po) e w
     | <:expr@loc< fun [ $PaOlbi _ lab p e1$ when $w$ -> $e2$ ] >> ->
         let lab = paolab lab p in
-        mkfun loc ("?" ^ lab) (Some (expr e1)) (patt p) e2 w
+        mkfun loc (Parr_optional lab) (Some (expr e1)) (patt p) e2 w
     | <:expr@loc< fun [ $PaOlb _ lab p$ when $w$ -> $e$ ] >> ->
         let lab = paolab lab p in
-        mkfun loc ("?" ^ lab) None (patt_of_lab loc lab p) e w
+        mkfun loc (Parr_optional lab) None (patt_of_lab loc lab p) e w
     | ExFun loc a -> mkexp loc (Pexp_function (match_case a []))
     | ExIfe loc e1 e2 e3 ->
         mkexp loc (Pexp_ifthenelse (expr e1) (expr e2) (Some (expr e3)))
@@ -928,7 +928,9 @@ value varify_constructors var_names =
     | ExLaz loc e -> mkexp loc (Pexp_lazy (expr e))
     | ExLet loc rf bi e ->
         mkexp loc (Pexp_let (mkrf rf) (binding bi []) (expr e))
-    | ExLmd loc i me e -> mkexp loc (Pexp_letmodule (with_loc i loc) (module_expr me) (expr e))
+    | ExLmd loc i me e ->
+      let mb = {pmb_loc=mkloc loc; pmb_name=with_loc i loc;pmb_expr=module_expr me;pmb_attributes=[]; pmb_implicit = Nonimplicit} in
+      mkexp loc (Pexp_letmodule (mb, (expr e)))
     | ExMat loc e a -> mkexp loc (Pexp_match (expr e) (match_case a []))
     | ExNew loc id -> mkexp loc (Pexp_new (long_type_ident id))
     | ExObj loc po cfl ->
@@ -964,7 +966,7 @@ value varify_constructors var_names =
     | ExSte loc e1 e2 ->
         mkexp loc
           (Pexp_apply (mkexp loc (Pexp_ident (array_function loc "String" "get")))
-            [("", expr e1); ("", expr e2)])
+            [(Papp_simple, expr e1); (Papp_simple, expr e2)])
     | ExStr loc s ->
         mkexp loc (Pexp_constant (Const_string (string_of_string_token loc s) None))
     | ExTry loc e a -> mkexp loc (Pexp_try (expr e) (match_case a []))
@@ -984,7 +986,7 @@ value varify_constructors var_names =
         mkexp loc (Pexp_while (expr e1) (expr e2))
     | ExOpI loc i ov e ->
         let fresh = override_flag loc ov in
-        mkexp loc (Pexp_open fresh (long_uident i) (expr e))
+        mkexp loc (Pexp_open (Open_all fresh) (long_uident i) (expr e))
     | <:expr@loc< (module $me$ : $pt$) >> ->
         mkexp loc (Pexp_constraint (mkexp loc (Pexp_pack (module_expr me)),
                     mktyp loc (Ptyp_package (package_type pt))))
@@ -1009,9 +1011,9 @@ value varify_constructors var_names =
     | e -> expr e ]
   and label_expr =
     fun
-    [ ExLab loc lab eo -> (lab, expr_of_lab loc lab eo)
-    | ExOlb loc lab eo -> ("?" ^ lab, expr_of_lab loc lab eo)
-    | e -> ("", expr e) ]
+    [ ExLab loc lab eo -> (Papp_labelled lab, expr_of_lab loc lab eo)
+    | ExOlb loc lab eo -> (Papp_optional lab, expr_of_lab loc lab eo)
+    | e -> (Papp_simple, expr e) ]
   and binding x acc =
     match x with
     [ <:binding< $x$ and $y$ >> ->
@@ -1165,7 +1167,8 @@ value varify_constructors var_names =
     | SgInc loc mt -> [mksig loc (Psig_include {pincl_mod=module_type mt;
                                                 pincl_attributes=[];
                                                 pincl_loc = mkloc loc}) :: l]
-    | SgMod loc n mt -> [mksig loc (Psig_module {pmd_loc=mkloc loc; pmd_name=with_loc n loc; pmd_type=module_type mt; pmd_attributes=[]}) :: l]
+    | SgMod loc n mt -> [mksig loc (Psig_module {
+       pmd_implicit = Nonimplicit; pmd_loc=mkloc loc; pmd_name=with_loc n loc; pmd_type=module_type mt; pmd_attributes=[]}) :: l]
     | SgRecMod loc mb ->
         [mksig loc (Psig_recmodule (module_sig_binding mb [])) :: l]
     | SgMty loc n mt ->
@@ -1176,8 +1179,8 @@ value varify_constructors var_names =
         in
         [mksig loc (Psig_modtype {pmtd_loc=mkloc loc; pmtd_name=with_loc n loc; pmtd_type=si; pmtd_attributes=[]}) :: l]
     | SgOpn loc ov id ->
-        let fresh = override_flag loc ov in
-        [mksig loc (Psig_open {popen_override=fresh; popen_lid=long_uident id;
+        let fresh = Open_all (override_flag loc ov) in
+        [mksig loc (Psig_open {popen_flag=fresh; popen_lid=long_uident id;
                                popen_attributes=[]; popen_loc = mkloc loc}) :: l]
     | SgTyp loc tdl ->
       let ty =
@@ -1194,7 +1197,7 @@ value varify_constructors var_names =
     [ <:module_binding< $x$ and $y$ >> ->
         module_sig_binding x (module_sig_binding y acc)
     | <:module_binding@loc< $s$ : $mt$ >> ->
-        [{pmd_loc=mkloc loc; pmd_name=with_loc s loc; pmd_type=module_type mt; pmd_attributes=[]} :: acc]
+        [{pmd_implicit = Nonimplicit;pmd_loc=mkloc loc; pmd_name=with_loc s loc; pmd_type=module_type mt; pmd_attributes=[]} :: acc]
     | _ -> assert False ]
   and module_str_binding x acc =
     match x with
@@ -1208,6 +1211,7 @@ value varify_constructors var_names =
            pmod_desc=Pmod_constraint(module_expr me,module_type mt);
            pmod_attributes=[];
           };
+          pmb_implicit = Nonimplicit;
           pmb_attributes=[]} :: acc]
     | _ -> assert False ]
   and module_expr =
@@ -1271,7 +1275,9 @@ value varify_constructors var_names =
     | StInc loc me -> [mkstr loc (Pstr_include {pincl_mod=module_expr me;
                                                 pincl_attributes=[];
                                                 pincl_loc=mkloc loc}) :: l]
-    | StMod loc n me -> [mkstr loc (Pstr_module {pmb_loc=mkloc loc; pmb_name=with_loc n loc;pmb_expr=module_expr me;pmb_attributes=[]}) :: l]
+    | StMod loc n me -> [mkstr loc (Pstr_module {
+        pmb_implicit = Nonimplicit; pmb_loc=mkloc loc;
+        pmb_name=with_loc n loc;pmb_expr=module_expr me;pmb_attributes=[]}) :: l]
     | StRecMod loc mb ->
         [mkstr loc (Pstr_recmodule (module_str_binding mb [])) :: l]
     | StMty loc n mt ->
@@ -1283,7 +1289,7 @@ value varify_constructors var_names =
         [mkstr loc (Pstr_modtype {pmtd_loc=mkloc loc; pmtd_name=with_loc n loc; pmtd_type=si; pmtd_attributes=[]}) :: l]
     | StOpn loc ov id ->
         let fresh = override_flag loc ov in
-        [mkstr loc (Pstr_open {popen_override=fresh;
+        [mkstr loc (Pstr_open {popen_flag=Open_all fresh;
                                popen_lid=long_uident id;
                                popen_attributes=[];
                                popen_loc=mkloc loc}) :: l]
@@ -1304,11 +1310,11 @@ value varify_constructors var_names =
         mkcty loc
           (Pcty_constr (long_class_ident id) (List.map ctyp (list_of_opt_ctyp tl [])))
     | CtFun loc (TyLab _ lab t) ct ->
-        mkcty loc (Pcty_arrow lab (ctyp t) (class_type ct))
+        mkcty loc (Pcty_arrow (Parr_labelled lab) (ctyp t) (class_type ct))
     | CtFun loc (TyOlb loc1 lab t) ct ->
         let t = TyApp loc1 (predef_option loc1) t in
-        mkcty loc (Pcty_arrow ("?" ^ lab) (ctyp t) (class_type ct))
-    | CtFun loc t ct -> mkcty loc (Pcty_arrow "" (ctyp t) (class_type ct))
+        mkcty loc (Pcty_arrow (Parr_optional lab) (ctyp t) (class_type ct))
+    | CtFun loc t ct -> mkcty loc (Pcty_arrow Parr_simple (ctyp t) (class_type ct))
     | CtSig loc t_o ctfl ->
         let t =
           match t_o with
@@ -1387,15 +1393,15 @@ value varify_constructors var_names =
           (Pcl_constr (long_class_ident id) (List.map ctyp (list_of_opt_ctyp tl [])))
     | CeFun loc (PaLab _ lab po) ce ->
         mkcl loc
-          (Pcl_fun lab None (patt_of_lab loc lab po) (class_expr ce))
+          (Pcl_fun (Parr_labelled lab) None (patt_of_lab loc lab po) (class_expr ce))
     | CeFun loc (PaOlbi _ lab p e) ce ->
         let lab = paolab lab p in
-        mkcl loc (Pcl_fun ("?" ^ lab) (Some (expr e)) (patt p) (class_expr ce))
+        mkcl loc (Pcl_fun (Parr_optional lab) (Some (expr e)) (patt p) (class_expr ce))
     | CeFun loc (PaOlb _ lab p) ce ->
         let lab = paolab lab p in
         mkcl loc
-          (Pcl_fun ("?" ^ lab) None (patt_of_lab loc lab p) (class_expr ce))
-    | CeFun loc p ce -> mkcl loc (Pcl_fun "" None (patt p) (class_expr ce))
+          (Pcl_fun (Parr_optional lab) None (patt_of_lab loc lab p) (class_expr ce))
+    | CeFun loc p ce -> mkcl loc (Pcl_fun Parr_simple None (patt p) (class_expr ce))
     | CeLet loc rf bi ce ->
         mkcl loc (Pcl_let (mkrf rf) (binding bi []) (class_expr ce))
     | CeStr loc po cfl ->

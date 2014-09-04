@@ -208,6 +208,7 @@ and print_simple_out_type ppf =
             n tyl;
           fprintf ppf ")@]"
       }
+  | Otyp_implicit_arrow _ -> failwith "TODO"
   | Otyp_alias _ _ | Otyp_poly _ _ | Otyp_open
   | Otyp_arrow _ _ _ | Otyp_constr _ [_ :: _] as ty ->
       fprintf ppf "@[<1>(%a)@]" print_out_type ty ]
@@ -364,7 +365,7 @@ and needs_semi =
   fun
   [ Osig_class _ _ _ _ rs
   | Osig_class_type _ _ _ _ rs
-  | Osig_module _ _ rs
+  | Osig_module _ _ rs _
   | Osig_type _ rs -> rs <> Orec_next
   | Osig_typext _ _
   | Osig_modtype _ _
@@ -401,9 +402,9 @@ and print_out_sig_item ppf =
   | Osig_modtype name mty ->
       fprintf ppf "@[<2>module type %s =@ %a@]" name
         Toploop.print_out_module_type.val mty
-  | Osig_module name (Omty_alias id) Orec_not ->
+  | Osig_module name (Omty_alias id) Orec_not _ ->
       fprintf ppf "@[<2>module %s :@ %a@]" name print_ident id
-  | Osig_module name mty rs ->
+  | Osig_module name mty rs _ ->
       fprintf ppf "@[<2>%s %s :@ %a@]"
         (match rs with [ Orec_not -> "module"
                        | Orec_first -> "module rec"
