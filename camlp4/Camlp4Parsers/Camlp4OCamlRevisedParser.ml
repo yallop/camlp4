@@ -482,7 +482,7 @@ New syntax:\
             <:module_expr< struct $st$ end >> ]
       | "apply"
         [ me1 = SELF; me2 = SELF -> <:module_expr< $me1$ $me2$ >>
-        | me1 = SELF; "("; ")" -> <:module_expr< $me1$ (struct end) >> ]
+        | me1 = SELF; "("; ")" -> <:module_expr< $me1$ () >> ]
       | "simple"
         [ `ANTIQUOT (""|"mexp"|"anti"|"list" as n) s ->
             <:module_expr< $anti:mk_anti ~c:"module_expr" n s$ >>

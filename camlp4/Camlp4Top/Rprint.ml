@@ -33,8 +33,10 @@ value rec print_ident ppf =
   fun
   [ Oide_ident s -> fprintf ppf "%s" s
   | Oide_dot id s -> fprintf ppf "%a.%s" print_ident id s
-  | Oide_apply id1 id2 ->
-      fprintf ppf "%a(%a)" print_ident id1 print_ident id2 ]
+  | Oide_apply id1 id2 Asttypes.Nonimplicit ->
+      fprintf ppf "%a(%a)" print_ident id1 print_ident id2
+  | Oide_apply id1 id2 Asttypes.Implicit ->
+      fprintf ppf "%a{%a}" print_ident id1 print_ident id2 ]
 ;
 
 value value_ident ppf name =
@@ -354,11 +356,14 @@ value rec print_out_module_type ppf =
   | Omty_signature sg ->
       fprintf ppf "@[<hv 2>sig@ %a@;<1 -2>end@]"
         Toploop.print_out_signature.val sg
-  | Omty_functor name None mty_res ->
-      fprintf ppf "@[<2>functor@ (%s) ->@ %a@]" name
+  | Omty_functor Ompar_generative mty_res ->
+      fprintf ppf "@[<2>functor@ () ->@ %a@]"
         print_out_module_type mty_res
-  | Omty_functor name (Some mty_arg) mty_res ->
+  | Omty_functor (Ompar_applicative name mty_arg) mty_res ->
       fprintf ppf "@[<2>functor@ (%s : %a) ->@ %a@]" name
+        print_out_module_type mty_arg print_out_module_type mty_res
+  | Omty_functor (Ompar_implicit name mty_arg) mty_res ->
+      fprintf ppf "@[<2>functor@ {%s : %a} ->@ %a@]" name
         print_out_module_type mty_arg print_out_module_type mty_res
   | Omty_abstract -> () ]
 and needs_semi =

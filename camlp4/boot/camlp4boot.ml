@@ -1036,8 +1036,7 @@ New syntax:\
                             (Gram.Action.mk
                                (fun _ _ (me1 : 'module_expr)
                                   (_loc : Gram.Loc.t) ->
-                                  (Ast.MeApp (_loc, me1,
-                                     (Ast.MeStr (_loc, (Ast.StNil _loc)))) :
+                                  (Ast.MeApp (_loc, me1, (Ast.MeNil _loc)) :
                                     'module_expr))));
                            ([ Gram.Sself; Gram.Sself ],
                             (Gram.Action.mk

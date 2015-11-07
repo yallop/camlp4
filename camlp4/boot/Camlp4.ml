@@ -1,13 +1,3 @@
-let parr = function
-  | "" -> Parsetree.Parr_simple
-  | s when s.[0] = '?' -> Parr_optional (String.sub s 1 (String.length s - 1))
-  | s  -> Parsetree.Parr_labelled s
-
-let papp = function
-  | "" -> Parsetree.Papp_simple
-  | s when s.[0] = '?' -> Papp_optional (String.sub s 1 (String.length s - 1))
-  | s  -> Parsetree.Papp_labelled s
-
 module Utils : sig val float_repres : float -> string
                       end =
   struct
@@ -14612,13 +14602,15 @@ module Struct =
           struct
             type t =
               Longident.t =
-                | Lident of string | Ldot of t * string | Lapply of t * t
+                | Lident of string
+                | Ldot of t * string
+                | Lapply of t * t * Asttypes.implicit_flag
             
             let last =
               function
               | Lident s -> s
               | Ldot (_, s) -> s
-              | Lapply (_, _) -> failwith "Longident.last"
+              | Lapply (_, _, _) -> failwith "Longident.last"
               
           end
           
@@ -14719,7 +14711,7 @@ module Struct =
               
             let ldot l s = Ldot (l, s)
               
-            let lapply l s = Lapply (l, s)
+            let lapply l s = Lapply (l, s, Asttypes.Nonimplicit)
               
             let conv_con =
               let t = Hashtbl.create 73
@@ -14768,7 +14760,8 @@ module Struct =
                 | Ast.IdAcc (_, i1, i2) -> self i2 (Some (self i1 acc))
                 | Ast.IdApp (_, i1, i2) ->
                     let i' =
-                      Lapply ((fst (self i1 None)), (fst (self i2 None))) in
+                      Lapply ((fst (self i1 None)), (fst (self i2 None)),
+                        Asttypes.Nonimplicit) in
                     let x =
                       (match acc with
                        | None -> i'
@@ -14824,7 +14817,8 @@ module Struct =
               | Ast.TyId (_, i) -> ident_noloc i
               | Ast.TyApp (_, m1, m2) ->
                   let li1 = ctyp_long_id_prefix m1 in
-                  let li2 = ctyp_long_id_prefix m2 in Lapply (li1, li2)
+                  let li2 = ctyp_long_id_prefix m2
+                  in Lapply (li1, li2, Asttypes.Nonimplicit)
               | t -> error (loc_of_ctyp t) "invalid module expression"
               
             let ctyp_long_id t =
@@ -14873,12 +14867,13 @@ module Struct =
                     then mktyp loc (Ptyp_class (li, (List.map ctyp al)))
                     else mktyp loc (Ptyp_constr (li, (List.map ctyp al)))
               | TyArr (loc, (TyLab (_, lab, t1)), t2) ->
-                  mktyp loc (Ptyp_arrow (parr lab, (ctyp t1), (ctyp t2)))
+                  mktyp loc
+                    (Ptyp_arrow ((Parr_labelled lab), (ctyp t1), (ctyp t2)))
               | TyArr (loc, (TyOlb (loc1, lab, t1)), t2) ->
                   let t1 = TyApp (loc1, (predef_option loc1), t1)
                   in
                     mktyp loc
-                      (Ptyp_arrow (Parr_optional lab, (ctyp t1), (ctyp t2)))
+                      (Ptyp_arrow ((Parr_optional lab), (ctyp t1), (ctyp t2)))
               | TyArr (loc, t1, t2) ->
                   mktyp loc (Ptyp_arrow (Parr_simple, (ctyp t1), (ctyp t2)))
               | Ast.TyObj (loc, fl, Ast.RvNil) ->
@@ -15641,7 +15636,9 @@ module Struct =
                          Pexp_apply
                            ((mkexp loc
                                (Pexp_ident (array_function loc "Array" "set"))),
-                           [ (Papp_simple, (expr e1)); (Papp_simple, (expr e2)); (Papp_simple, (expr v)) ])
+                           [ (Papp_simple, (expr e1));
+                             (Papp_simple, (expr e2));
+                             (Papp_simple, (expr v)) ])
                      | Ast.ExId (_, (Ast.IdLid (lloc, lab))) ->
                          Pexp_setinstvar ((with_loc lab lloc), (expr v))
                      | ExSte (loc, e1, e2) ->
@@ -15649,7 +15646,9 @@ module Struct =
                            ((mkexp loc
                                (Pexp_ident
                                   (array_function loc "String" "set"))),
-                           [ (Papp_simple, (expr e1)); (Papp_simple, (expr e2)); (Papp_simple, (expr v)) ])
+                           [ (Papp_simple, (expr e1));
+                             (Papp_simple, (expr e2));
+                             (Papp_simple, (expr v)) ])
                      | _ -> error loc "bad left part of assignment")
                   in mkexp loc e
               | ExAsr (loc, e) -> mkexp loc (Pexp_assert (expr e))
@@ -15670,15 +15669,21 @@ module Struct =
                       (Pexp_for ((patt p), (expr e1), (expr e2),
                          (mkdirection df), (expr e3)))
               | Ast.ExFun (loc, (Ast.McArr (_, (PaLab (_, lab, po)), w, e)))
-                  -> mkfun loc lab None (patt_of_lab loc lab po) e w
+                  ->
+                  mkfun loc (Parr_labelled lab) None (patt_of_lab loc lab po)
+                    e w
               | Ast.ExFun (loc,
                   (Ast.McArr (_, (PaOlbi (_, lab, p, e1)), w, e2))) ->
                   let lab = paolab lab p
-                  in mkfun loc ("?" ^ lab) (Some (expr e1)) (patt p) e2 w
+                  in
+                    mkfun loc (Parr_optional lab) (Some (expr e1)) (patt p)
+                      e2 w
               | Ast.ExFun (loc, (Ast.McArr (_, (PaOlb (_, lab, p)), w, e)))
                   ->
                   let lab = paolab lab p
-                  in mkfun loc ("?" ^ lab) None (patt_of_lab loc lab p) e w
+                  in
+                    mkfun loc (Parr_optional lab) None
+                      (patt_of_lab loc lab p) e w
               | ExFun (loc, a) -> mkexp loc (Pexp_function (match_case a []))
               | ExIfe (loc, e1, e2, e3) ->
                   mkexp loc
@@ -15721,15 +15726,15 @@ module Struct =
               | ExLet (loc, rf, bi, e) ->
                   mkexp loc (Pexp_let ((mkrf rf), (binding bi []), (expr e)))
               | ExLmd (loc, i, me, e) ->
-                  let mb = {
-                    pmb_loc = mkloc loc;
-                    pmb_name = with_loc i loc;
-                    pmb_expr = module_expr me;
-                    pmb_attributes = [];
-                    pmb_implicit = Nonimplicit;
-                  } in
-                  mkexp loc
-                    (Pexp_letmodule (mb, (expr e)))
+                  let mb =
+                    {
+                      pmb_loc = mkloc loc;
+                      pmb_name = with_loc i loc;
+                      pmb_expr = module_expr me;
+                      pmb_attributes = [];
+                      pmb_implicit = Nonimplicit;
+                    }
+                  in mkexp loc (Pexp_letmodule ((mb, (expr e))))
               | ExMat (loc, e, a) ->
                   mkexp loc (Pexp_match ((expr e), (match_case a [])))
               | ExNew (loc, id) -> mkexp loc (Pexp_new (long_type_ident id))
@@ -15798,8 +15803,11 @@ module Struct =
                   let e2 = ExSeq (loc, el)
                   in mkexp loc (Pexp_while ((expr e1), (expr e2)))
               | ExOpI (loc, i, ov, e) ->
-                  let fresh = Open_all (override_flag loc ov)
-                  in mkexp loc (Pexp_open (fresh, (long_uident i), (expr e)))
+                  let fresh = override_flag loc ov
+                  in
+                    mkexp loc
+                      (Pexp_open ((Open_all fresh), (long_uident i),
+                         (expr e)))
               | Ast.ExPkg (loc, (Ast.MeTyc (_, me, pt))) ->
                   mkexp loc
                     (Pexp_constraint
@@ -15835,9 +15843,10 @@ module Struct =
               | e -> expr e
             and label_expr =
               function
-              | ExLab (loc, lab, eo) -> (papp lab, (expr_of_lab loc lab eo))
+              | ExLab (loc, lab, eo) ->
+                  ((Papp_labelled lab), (expr_of_lab loc lab eo))
               | ExOlb (loc, lab, eo) ->
-                  (Papp_optional lab, (expr_of_lab loc lab eo))
+                  ((Papp_optional lab), (expr_of_lab loc lab eo))
               | e -> (Papp_simple, (expr e))
             and binding x acc =
               match x with
@@ -15906,7 +15915,7 @@ module Struct =
               in { pc_lhs = p; pc_guard = g; pc_rhs = expr e; }
             and mkfun loc lab def p e w =
               let () = match w with | Ast.ExNil _ -> () | _ -> assert false
-              in mkexp loc (Pexp_fun (parr lab, def, p, (expr e)))
+              in mkexp loc (Pexp_fun (lab, def, p, (expr e)))
             and mklabexp x acc =
               match x with
               | Ast.RbSem (_, x, y) -> mklabexp x (mklabexp y acc)
@@ -15961,11 +15970,12 @@ module Struct =
               | Ast.MtId (loc, i) -> mkmty loc (Pmty_ident (long_uident i))
               | Ast.MtFun ((loc, "*", Ast.MtNil _, mt)) ->
                   mkmty loc
-                    (Pmty_functor ((with_loc "*" loc), None,
-                       (module_type mt)))
+                    (Pmty_functor (Pmpar_generative, (module_type mt)))
               | Ast.MtFun (loc, n, nt, mt) ->
                   mkmty loc
-                    (Pmty_functor ((with_loc n loc), (Some (module_type nt)),
+                    (Pmty_functor
+                       ((Pmpar_applicative ((with_loc n loc),
+                           (module_type nt))),
                        (module_type mt)))
               | Ast.MtQuo (loc, _) ->
                   error loc "module type variable not allowed here"
@@ -16047,11 +16057,11 @@ module Struct =
                   (mksig loc
                      (Psig_module
                         {
+                          pmd_implicit = Nonimplicit;
                           pmd_loc = mkloc loc;
                           pmd_name = with_loc n loc;
                           pmd_type = module_type mt;
                           pmd_attributes = [];
-                          pmd_implicit = Nonimplicit;
                         })) ::
                     l
               | SgRecMod (loc, mb) ->
@@ -16102,11 +16112,11 @@ module Struct =
                   module_sig_binding x (module_sig_binding y acc)
               | Ast.MbCol (loc, s, mt) ->
                   {
+                    pmd_implicit = Nonimplicit;
                     pmd_loc = mkloc loc;
                     pmd_name = with_loc s loc;
                     pmd_type = module_type mt;
                     pmd_attributes = [];
-                    pmd_implicit = Nonimplicit;
                   } :: acc
               | _ -> assert false
             and module_str_binding x acc =
@@ -16125,24 +16135,29 @@ module Struct =
                             (((module_expr me), (module_type mt)));
                         pmod_attributes = [];
                       };
-                    pmb_attributes = [];
                     pmb_implicit = Nonimplicit;
+                    pmb_attributes = [];
                   } :: acc
               | _ -> assert false
             and module_expr =
               function
               | Ast.MeNil loc -> error loc "nil module expression"
               | Ast.MeId (loc, i) -> mkmod loc (Pmod_ident (long_uident i))
+              | Ast.MeApp (loc, me1, (Ast.MeNil _)) ->
+                  mkmod loc
+                    (Pmod_apply ((module_expr me1), Pmarg_generative))
               | Ast.MeApp (loc, me1, me2) ->
                   mkmod loc
-                    (Pmod_apply ((module_expr me1), (module_expr me2)))
+                    (Pmod_apply ((module_expr me1),
+                       (Pmarg_applicative (module_expr me2))))
               | Ast.MeFun ((loc, "*", Ast.MtNil _, me)) ->
                   mkmod loc
-                    (Pmod_functor ((with_loc "*" loc), None,
-                       (module_expr me)))
+                    (Pmod_functor (Pmpar_generative, (module_expr me)))
               | Ast.MeFun (loc, n, mt, me) ->
                   mkmod loc
-                    (Pmod_functor ((with_loc n loc), (Some (module_type mt)),
+                    (Pmod_functor
+                       ((Pmpar_applicative ((with_loc n loc),
+                           (module_type mt))),
                        (module_expr me)))
               | Ast.MeStr (loc, sl) ->
                   mkmod loc (Pmod_structure (str_item sl []))
@@ -16245,11 +16260,11 @@ module Struct =
                   (mkstr loc
                      (Pstr_module
                         {
+                          pmb_implicit = Nonimplicit;
                           pmb_loc = mkloc loc;
                           pmb_name = with_loc n loc;
                           pmb_expr = module_expr me;
                           pmb_attributes = [];
-                    pmb_implicit = Nonimplicit;
                         })) ::
                     l
               | StRecMod (loc, mb) ->
@@ -16271,12 +16286,12 @@ module Struct =
                           })) ::
                       l
               | StOpn (loc, ov, id) ->
-                  let fresh = Open_all (override_flag loc ov)
+                  let fresh = override_flag loc ov
                   in
                     (mkstr loc
                        (Pstr_open
                           {
-                            popen_flag = fresh;
+                            popen_flag = Open_all fresh;
                             popen_lid = long_uident id;
                             popen_attributes = [];
                             popen_loc = mkloc loc;
@@ -16299,14 +16314,18 @@ module Struct =
                     (Pcty_constr ((long_class_ident id),
                        (List.map ctyp (list_of_opt_ctyp tl []))))
               | CtFun (loc, (TyLab (_, lab, t)), ct) ->
-                  mkcty loc (Pcty_arrow (parr lab, (ctyp t), (class_type ct)))
+                  mkcty loc
+                    (Pcty_arrow ((Parr_labelled lab), (ctyp t),
+                       (class_type ct)))
               | CtFun (loc, (TyOlb (loc1, lab, t)), ct) ->
                   let t = TyApp (loc1, (predef_option loc1), t)
                   in
                     mkcty loc
-                      (Pcty_arrow (Parr_optional lab, (ctyp t), (class_type ct)))
+                      (Pcty_arrow ((Parr_optional lab), (ctyp t),
+                         (class_type ct)))
               | CtFun (loc, t, ct) ->
-                  mkcty loc (Pcty_arrow (Parr_simple, (ctyp t), (class_type ct)))
+                  mkcty loc
+                    (Pcty_arrow (Parr_simple, (ctyp t), (class_type ct)))
               | CtSig (loc, t_o, ctfl) ->
                   let t =
                     (match t_o with | Ast.TyNil _ -> Ast.TyAny loc | t -> t) in
@@ -16405,22 +16424,23 @@ module Struct =
                        (List.map ctyp (list_of_opt_ctyp tl []))))
               | CeFun (loc, (PaLab (_, lab, po)), ce) ->
                   mkcl loc
-                    (Pcl_fun (parr lab, None, (patt_of_lab loc lab po),
-                       (class_expr ce)))
+                    (Pcl_fun ((Parr_labelled lab), None,
+                       (patt_of_lab loc lab po), (class_expr ce)))
               | CeFun (loc, (PaOlbi (_, lab, p, e)), ce) ->
                   let lab = paolab lab p
                   in
                     mkcl loc
-                      (Pcl_fun (Parr_optional lab, (Some (expr e)), (patt p),
-                         (class_expr ce)))
+                      (Pcl_fun ((Parr_optional lab), (Some (expr e)),
+                         (patt p), (class_expr ce)))
               | CeFun (loc, (PaOlb (_, lab, p)), ce) ->
                   let lab = paolab lab p
                   in
                     mkcl loc
-                      (Pcl_fun (Parr_optional lab, None, (patt_of_lab loc lab p),
-                         (class_expr ce)))
+                      (Pcl_fun ((Parr_optional lab), None,
+                         (patt_of_lab loc lab p), (class_expr ce)))
               | CeFun (loc, p, ce) ->
-                  mkcl loc (Pcl_fun (Parr_simple, None, (patt p), (class_expr ce)))
+                  mkcl loc
+                    (Pcl_fun (Parr_simple, None, (patt p), (class_expr ce)))
               | CeLet (loc, rf, bi, ce) ->
                   mkcl loc
                     (Pcl_let ((mkrf rf), (binding bi []), (class_expr ce)))

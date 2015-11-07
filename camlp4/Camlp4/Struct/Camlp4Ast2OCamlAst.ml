@@ -50,12 +50,12 @@ module Longident = struct
   type t = Longident.t ==
            [ Lident of string
            | Ldot of t and string
-           | Lapply of t and t ];
+           | Lapply of t and t and Asttypes.implicit_flag ];
 
   value last = fun
     [ Lident s -> s
     | Ldot _ s -> s
-    | Lapply _ _ -> failwith "Longident.last" ];
+    | Lapply _ _ _ -> failwith "Longident.last" ];
 end;
 
 module Make (Ast : Sig.Camlp4Ast) = struct
@@ -127,7 +127,7 @@ module Make (Ast : Sig.Camlp4Ast) = struct
 
 
   value ldot l s = Ldot l s;
-  value lapply l s = Lapply l s;
+  value lapply l s = Lapply l s Asttypes.Nonimplicit;
 
   value conv_con =
     let t = Hashtbl.create 73 in
@@ -179,7 +179,11 @@ module Make (Ast : Sig.Camlp4Ast) = struct
       | <:ident< $i1$.$i2$ >> ->
           self i2 (Some (self i1 acc))
       | <:ident< $i1$ $i2$ >> ->
-          let i' = Lapply (fst (self i1 None)) (fst (self i2 None)) in
+          let i' = Lapply
+                     (fst (self i1 None))
+                     (fst (self i2 None))
+                     Asttypes.Nonimplicit
+          in
           let x =
             match acc with
             [ None -> i'
@@ -232,7 +236,7 @@ module Make (Ast : Sig.Camlp4Ast) = struct
     | <:ctyp< $m1$ $m2$ >> ->
         let li1 = ctyp_long_id_prefix m1 in
         let li2 = ctyp_long_id_prefix m2 in
-        Lapply li1 li2
+          Lapply li1 li2 Asttypes.Nonimplicit
     | t -> error (loc_of_ctyp t) "invalid module expression" ]
   ;
 
@@ -1123,9 +1127,11 @@ value varify_constructors var_names =
     [ <:module_type@loc<>> -> error loc "abstract/nil module type not allowed here"
     | <:module_type@loc< $id:i$ >> -> mkmty loc (Pmty_ident (long_uident i))
     | Ast.MtFun(loc, "*", Ast.MtNil _, mt) ->
-        mkmty loc (Pmty_functor (with_loc "*" loc) None (module_type mt))
+        mkmty loc (Pmty_functor Pmpar_generative (module_type mt))
     | <:module_type@loc< functor ($n$ : $nt$) -> $mt$ >> ->
-        mkmty loc (Pmty_functor (with_loc n loc) (Some (module_type nt)) (module_type mt))
+        mkmty loc (Pmty_functor
+                     (Pmpar_applicative (with_loc n loc) (module_type nt))
+                     (module_type mt))
     | <:module_type@loc< '$_$ >> -> error loc "module type variable not allowed here"
     | <:module_type@loc< sig $sl$ end >> ->
         mkmty loc (Pmty_signature (sig_item sl []))
@@ -1218,12 +1224,17 @@ value varify_constructors var_names =
     fun
     [ <:module_expr@loc<>> -> error loc "nil module expression"
     | <:module_expr@loc< $id:i$ >> -> mkmod loc (Pmod_ident (long_uident i))
+    | <:module_expr@loc< $me1$ () >> ->
+        mkmod loc (Pmod_apply (module_expr me1) Pmarg_generative)
     | <:module_expr@loc< $me1$ $me2$ >> ->
-        mkmod loc (Pmod_apply (module_expr me1) (module_expr me2))
+        mkmod loc (Pmod_apply (module_expr me1)
+                              (Pmarg_applicative (module_expr me2)))
     | Ast.MeFun(loc, "*", Ast.MtNil _, me) ->
-        mkmod loc (Pmod_functor (with_loc "*" loc) None (module_expr me))
+        mkmod loc (Pmod_functor Pmpar_generative (module_expr me))
     | <:module_expr@loc< functor ($n$ : $mt$) -> $me$ >> ->
-        mkmod loc (Pmod_functor (with_loc n loc) (Some (module_type mt)) (module_expr me))
+        mkmod loc (Pmod_functor
+                     (Pmpar_applicative (with_loc n loc) (module_type mt))
+                     (module_expr me))
     | <:module_expr@loc< struct $sl$ end >> ->
         mkmod loc (Pmod_structure (str_item sl []))
     | <:module_expr@loc< ($me$ : $mt$) >> ->
